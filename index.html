@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QISCET AI Admissions Bot - Flask Server</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Light blue-gray background */
+        }
+        .chat-container {
+            max-width: 768px;
+            height: 90vh;
+            margin: 20px auto;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            background-color: white;
+            border-radius: 1.5rem; /* Rounded corners */
+            overflow: hidden;
+        }
+        /* (Simplified CSS styles for clarity) */
+        .header { background-color: #0b693e; color: white; padding: 1rem 1.5rem; border-top-left-radius: 1.5rem; border-top-right-radius: 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+        .chat-area { flex-grow: 1; padding: 1rem; overflow-y: auto; scroll-behavior: smooth; background-color: #ffffff; }
+        .message { margin-bottom: 1rem; display: flex; }
+        .bot-message { justify-content: flex-start; }
+        .user-message { justify-content: flex-end; }
+        .bot-bubble { background-color: #e2f0e8; color: #1f2937; padding: 0.75rem 1rem; max-width: 80%; border-radius: 1rem 1rem 1rem 0; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); }
+        .user-bubble { background-color: #0b693e; color: white; padding: 0.75rem 1rem; max-width: 80%; border-radius: 1rem 1rem 0 1rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
+        .input-area { padding: 1rem; border-top: 1px solid #e2e8f0; background-color: #f7fafc; display: flex; gap: 0.5rem; align-items: center; }
+        .send-button { background-color: #0b693e; transition: background-color 0.2s; }
+        .send-button:hover { background-color: #084c2c; }
+        .loading-indicator { display: flex; gap: 0.5rem; align-items: center; color: #6b7280; font-style: italic; padding: 0.5rem; }
+        .loading-dot { width: 8px; height: 8px; background-color: #0b693e; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out both; }
+        .loading-dot:nth-child(1) { animation-delay: -0.32s; }
+        .loading-dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1.0); } }
+        .citation { font-size: 0.75rem; margin-top: 0.5rem; color: #6b7280; border-top: 1px dashed #cbd5e1; padding-top: 0.5rem; }
+        .citation a { color: #10b981; text-decoration: none; word-break: break-all; }
+        .citation a:hover { text-decoration: underline; }
+        .status-panel { padding: 0.75rem 1rem; background-color: #fffbe0; border-bottom: 2px solid #fcd34d; font-size: 0.875rem; color: #78350f; }
+        .status-item { display: flex; align-items: center; margin-right: 1rem; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 0.3rem; }
+        .dot-green { background-color: #10b981; }
+        .dot-red { background-color: #ef4444; }
+        .dot-yellow { background-color: #f59e0b; }
+        .user-info { font-size: 0.75rem; opacity: 0.7; text-align: right; }
+        .welcome-message { text-align: center; padding: 1rem; color: #4b5563; }
+        
+        @media (max-width: 640px) {
+            .chat-container { height: 100vh; margin: 0; border-radius: 0; }
+            .header { padding: 1rem; border-radius: 0; }
+            .status-panel div { flex-wrap: wrap; }
+            .status-item { margin-bottom: 0.25rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading-overlay" class="fixed inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50 hidden">
+        <div class="flex flex-col items-center p-8 bg-white rounded-xl shadow-2xl">
+            <div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div>
+            <p class="mt-4 text-lg font-semibold text-gray-700">Connecting to Server...</p>
+            <p class="text-sm text-gray-500">Establishing secure connection for AI processing.</p>
+        </div>
+    </div>
+    
+    <div class="chat-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-graduation-cap text-3xl"></i>
+                <div>
+                    <h1 class="text-xl font-bold">QISCET Admissions Bot (Flask)</h1>
+                    <p class="text-sm opacity-80">Secure AI powered by Python on Google Cloud.</p>
+                </div>
+            </div>
+            <p id="user-id-display" class="user-info">Server Mode</p>
+        </div>
+
+        <!-- Campus Status Panel (IoT) -->
+        <div id="status-panel" class="status-panel">
+            <div class="font-semibold mb-1 flex items-center">
+                <i class="fas fa-microchip mr-2"></i> Real-time Campus Status:
+            </div>
+            <div id="status-items" class="flex flex-wrap text-xs md:text-sm">
+                <p>Loading status...</p>
+            </div>
+        </div>
+
+        <!-- Chat Area -->
+        <div id="chat-area" class="chat-area">
+            <div class="message bot-message">
+                <div class="bot-bubble">
+                    Hello! I am **QIS Bot**. I am powered by a secure Python server on Google Cloud. I can answer questions about admissions, fees, transport, and real-time campus status! How can I help?
+                </div>
+            </div>
+            <!-- Messages injected here -->
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="Ask about B.Tech, the AI lab, or the pickup time for Bus 13..."
+                   class="flex-grow p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-150"
+                   onkeydown="if(event.key === 'Enter') sendMessage()">
+            <button id="send-button" onclick="sendMessage()"
+                    class="send-button text-white p-3 rounded-xl shadow-lg flex items-center justify-center disabled:opacity-50"
+                    disabled>
+                <i class="fas fa-paper-plane text-lg"></i>
+            </button>
+        </div>
+        
+        <!-- Loading Indicator -->
+        <div id="loading-indicator" class="loading-indicator hidden px-4 py-2">
+            <span class="loading-dot"></span>
+            <span class="loading-dot"></span>
+            <span class="loading-dot"></span>
+            <span class="text-sm">QIS Bot is typing...</span>
+        </div>
+
+    </div>
+
+    <script>
+        // --- CLIENT-SIDE JAVASCRIPT ---
+        const chatArea = document.getElementById('chat-area');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const statusItemsContainer = document.getElementById('status-items');
+
+        let chatHistory = [];
+        let isSending = false;
+
+        // Utility functions
+        const setSendingState = (sending) => {
+            isSending = sending;
+            userInput.disabled = sending;
+            sendButton.disabled = sending || userInput.value.trim() === '';
+            loadingIndicator.classList.toggle('hidden', !sending);
+        };
+
+        const displayMessage = (text, role, sources = []) => {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}-message`;
+            
+            let parsedText = typeof marked !== 'undefined' ? marked.parse(text) : text;
+            
+            let contentHTML = `<div class="${role}-bubble">`;
+            contentHTML += parsedText;
+            
+            if (sources.length > 0) {
+                contentHTML += `<div class="citation mt-3">**Sources:**<ul class="list-disc list-inside mt-1 space-y-1">`;
+                sources.forEach(source => {
+                    if (source.uri && source.title) {
+                        contentHTML += `<li><a href="${source.uri}" target="_blank" rel="noopener noreferrer" title="${source.title}">${source.title.substring(0, 50)}...</a></li>`;
+                    }
+                });
+                contentHTML += `</ul></div>`;
+            }
+            contentHTML += `</div>`;
+            messageDiv.innerHTML = contentHTML;
+            chatArea.appendChild(messageDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        };
+        
+        // --- IoT Status Fetching (Calls Flask server /status endpoint) ---
+        const fetchStatus = async () => {
+            try {
+                // Flask provides the status via a simple GET request
+                const response = await fetch('/status');
+                if (!response.ok) throw new Error("Failed to fetch campus status.");
+                const statusData = await response.json();
+                
+                statusItemsContainer.innerHTML = '';
+                for (const [key, value] of Object.entries(statusData)) {
+                    const item = document.createElement('div');
+                    item.className = 'status-item';
+                    
+                    let dotClass = 'dot-green';
+                    if (value.includes('Degraded') || value.includes('High') || value.includes('Busy')) {
+                        dotClass = 'dot-yellow';
+                    } else if (value.includes('Closed') || value.includes('Generator')) {
+                        dotClass = 'dot-red';
+                    }
+
+                    item.innerHTML = `
+                        <span class="status-dot ${dotClass}"></span>
+                        <span class="font-medium">${key.replace(/_/g, ' ')}:</span> ${value}
+                    `;
+                    statusItemsContainer.appendChild(item);
+                }
+            } catch (error) {
+                console.error("Error fetching status:", error);
+                statusItemsContainer.innerHTML = `<p class="text-red-500">Status unavailable.</p>`;
+            }
+        };
+
+        // --- Core Chat Functionality (Calls Flask server /chat endpoint) ---
+        window.sendMessage = async () => {
+            if (isSending) return;
+
+            const userText = userInput.value.trim();
+            if (userText === '') return;
+
+            // 1. Display user message and clear input
+            displayMessage(userText, 'user');
+            userInput.value = '';
+            setSendingState(true);
+
+            // 2. Prepare history for the server
+            // We only send the role and text, as the server handles the full content objects
+            const historyForServer = chatHistory.map(msg => ({ 
+                role: msg.role, 
+                text: msg.parts[0].text 
+            }));
+            
+            try {
+                // 3. Call the secure Flask server endpoint
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: userText,
+                        history: historyForServer
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorJson = await response.json();
+                    throw new Error(errorJson.error || `Server error with status ${response.status}`);
+                }
+
+                const result = await response.json();
+                const botText = result.response;
+                const sources = result.sources || [];
+
+                // 4. Display bot response
+                displayMessage(botText, 'bot', sources);
+
+                // 5. Update local history
+                chatHistory.push({ role: "user", parts: [{ text: userText }] });
+                chatHistory.push({ role: "model", parts: [{ text: botText }] });
+
+            } catch (error) {
+                console.error("Chat Error:", error);
+                displayMessage(`I'm sorry, the secure server had an issue connecting to the AI: ${error.message.substring(0, 70)}...`, 'bot');
+            } finally {
+                setSendingState(false);
+            }
+        };
+
+        // --- Bootstrap ---
+        const loadScript = (url, callback) => {
+            const script = document.createElement('script');
+            script.src = url;
+            script.onload = callback;
+            document.head.appendChild(script);
+        };
+
+        // Load the markdown parser and initialize the UI after loading
+        loadScript('https://cdn.jsdelivr.net/npm/marked/marked.min.js', () => {
+            console.log('Markdown parser (marked.js) loaded. Starting status fetch...');
+            sendButton.disabled = userInput.value.trim() === '';
+            fetchStatus();
+            setInterval(fetchStatus, 30000); // Update status every 30s
+        });
+
+        // Initialize button check for enabling/disabling the send button
+        userInput.addEventListener('input', () => {
+            sendButton.disabled = isSending || userInput.value.trim() === '';
+        });
+    </script>
+</body>
+</html>
